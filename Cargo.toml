@@ -1,0 +1,8 @@
+[package]
+name = "winregnt"
+version = "0.1.0"
+authors = ["russ <russ@infocyte.com>"]
+edition = "2018"
+
+[dependencies]
+winapi = { version = "*", features = [ "ntdef", "winnt" ] }
