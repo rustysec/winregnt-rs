@@ -2,7 +2,6 @@ use crate::api::*;
 use std::ffi::OsString;
 use std::mem::size_of;
 use std::os::windows::ffi::OsStringExt;
-use std::ptr::null_mut;
 use winapi::shared::minwindef::ULONG;
 use winapi::shared::ntdef::HANDLE;
 
@@ -21,50 +20,53 @@ impl<'a> RegValueIterator<'a> {
 }
 
 impl<'a> Iterator for RegValueIterator<'a> {
-    type Item = String;
+    type Item = RegValueItem;
 
-    fn next(&mut self) -> Option<String> {
-        let mut result_length: ULONG = 0;
-        unsafe {
-            NtEnumerateValueKey(
-                *self.handle,
-                self.index,
-                KeyValueInformationClass::KeyValueBasicInformation,
-                null_mut() as _,
-                0,
-                &mut result_length,
-            )
-        };
-
-        let mut data: Vec<u8> = vec![0; result_length as _];
-        match unsafe {
-            NtEnumerateValueKey(
-                *self.handle,
-                self.index,
-                KeyValueInformationClass::KeyValueBasicInformation,
-                data.as_mut_ptr() as *mut _,
-                data.len() as _,
-                &mut result_length,
-            )
-        } {
-            0 => {
-                let value: KeyValueBasicInformation =
-                    unsafe { std::ptr::read(data.as_ptr() as *const _) };
-                let name: &[u16] = unsafe {
-                    std::slice::from_raw_parts(
-                        data[size_of::<KeyValueBasicInformation>()..].as_ptr() as _,
-                        (value.name_length / 2) as _,
-                    )
-                };
-                match OsString::from_wide(&name).into_string() {
-                    Ok(s) => {
-                        self.index += 1;
-                        Some(s)
-                    }
-                    _ => None,
-                }
+    fn next(&mut self) -> Option<RegValueItem> {
+        match enumerate_value_key(*self.handle, self.index) {
+            Some(data) => {
+                self.index += 1;
+                Some(RegValueItem::from(data))
             }
             _ => None,
+        }
+    }
+}
+
+pub struct RegValueItem {
+    name: Vec<u16>,
+    value: RegValue,
+}
+
+impl RegValueItem {
+    pub fn name(&self) -> String {
+        OsString::from_wide(&self.name).into_string().unwrap()
+    }
+
+    pub fn value(&self) -> RegValue {
+        self.value.clone()
+    }
+}
+
+impl std::fmt::Display for RegValueItem {
+    fn fmt(&self, fmt: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+        write!(fmt, "{}", self.name())
+    }
+}
+
+impl From<Vec<u8>> for RegValueItem {
+    fn from(data: Vec<u8>) -> RegValueItem {
+        let start = size_of::<KeyValueFullInformation>();
+        let value: KeyValueFullInformation = unsafe { std::ptr::read(data.as_ptr() as *const _) };
+        let name = unsafe {
+            std::slice::from_raw_parts::<u16>(
+                data[start..].as_ptr() as _,
+                (value.name_length / 2) as usize,
+            )
+        };
+        RegValueItem {
+            name: name.to_vec(),
+            value: RegValue::new(&value, &data),
         }
     }
 }

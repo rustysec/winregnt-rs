@@ -61,7 +61,7 @@ impl RegKey {
     }
 
     pub fn enum_keys(&self) -> RegKeyIterator {
-        RegKeyIterator::new(&self.handle)
+        RegKeyIterator::new(&self)
     }
 
     pub fn enum_values(&self) -> RegValueIterator {
