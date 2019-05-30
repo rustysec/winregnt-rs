@@ -17,9 +17,9 @@ pub enum RegValue {
 impl ::std::fmt::Display for RegValue {
     fn fmt(&self, fmt: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
         match self {
-            RegValue::String(ref s) => write!(fmt, "{}", s),
-            RegValue::Dword(ref d) => write!(fmt, "{}", d),
-            v => write!(fmt, "{:?}", v),
+            RegValue::String(ref v) => write!(fmt, "{}", v),
+            RegValue::Dword(ref v) => write!(fmt, "{}", v),
+            v => write!(fmt, "? {:?}", v),
         }
     }
 }
@@ -89,7 +89,7 @@ pub struct KeyValueFullInformation {
 
 #[allow(non_camel_case_types)]
 #[repr(C)]
-#[derive(PartialEq, PartialOrd)]
+#[derive(Debug, PartialEq, PartialOrd)]
 pub enum ValueType {
     REG_NONE = 0,
     REG_SZ = 1,

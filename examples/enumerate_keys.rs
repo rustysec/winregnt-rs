@@ -9,9 +9,9 @@ fn main() {
     println!("Keys:");
     reg.enum_keys().for_each(|k| {
         println!("- {}", k);
-        k.open()
-            .unwrap()
-            .enum_values()
-            .for_each(|v| println!("-- {}: {}", v, v.value()));
+        k.open().map(|key| {
+            key.enum_values()
+                .for_each(|v| println!("-- {}: {}", v, v.value()));
+        });
     });
 }

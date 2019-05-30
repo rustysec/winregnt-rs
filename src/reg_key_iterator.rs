@@ -59,7 +59,14 @@ pub struct RegSubkey<'a> {
 
 impl<'a> RegSubkey<'a> {
     pub fn open(&'a self) -> Result<RegKey, ()> {
-        let mut s = OsString::from_wide(self.parent).into_string().unwrap();
+        let parent = {
+            let mut p = self.parent.to_vec();
+            p.pop();
+            p
+        };
+
+        let mut s = OsString::from_wide(&parent).into_string().unwrap();
+        s.push_str("\\");
         s.push_str(&self.name);
         RegKey::open(s)
     }
