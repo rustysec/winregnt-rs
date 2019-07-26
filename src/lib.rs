@@ -3,7 +3,7 @@ mod reg_key_iterator;
 mod reg_value_iterator;
 mod unicode_string;
 
-use crate::api::*;
+pub use crate::api::*;
 use crate::reg_key_iterator::*;
 use crate::reg_value_iterator::*;
 use crate::unicode_string::*;
@@ -32,11 +32,20 @@ impl Drop for RegKey {
 }
 
 impl RegKey {
-    pub fn open(name: String) -> Result<RegKey, ()> {
+    /// opens a registry key
+    ///
+    /// # Examples
+    /// ```
+    /// let reg = RegKey::open(r"\Registry\User").unwrap();
+    /// ```
+    ///
+    pub fn open<S: Into<String>>(name: S) -> Result<RegKey, ()> {
         let mut key = RegKey {
             handle: unsafe { zeroed() },
             name: {
-                let mut t = OsString::from(name).encode_wide().collect::<Vec<u16>>();
+                let mut t = OsString::from(name.into())
+                    .encode_wide()
+                    .collect::<Vec<u16>>();
                 t.push(0x00);
                 t
             },
@@ -60,10 +69,12 @@ impl RegKey {
         }
     }
 
+    /// get an sub key enumerator
     pub fn enum_keys(&self) -> RegKeyIterator {
         RegKeyIterator::new(&self)
     }
 
+    /// get a key value iterator
     pub fn enum_values(&self) -> RegValueIterator {
         RegValueIterator::new(&self.handle)
     }

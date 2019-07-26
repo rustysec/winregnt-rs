@@ -6,6 +6,7 @@ use std::os::windows::ffi::OsStringExt;
 use winapi::shared::minwindef::ULONG;
 use winapi::shared::ntdef::HANDLE;
 
+/// iterator over registry keys
 pub struct RegKeyIterator<'a> {
     handle: &'a HANDLE,
     index: ULONG,
@@ -13,6 +14,7 @@ pub struct RegKeyIterator<'a> {
 }
 
 impl<'a> RegKeyIterator<'a> {
+    /// get an iterator for a `RegKey`
     pub fn new(key: &'a RegKey) -> RegKeyIterator<'a> {
         RegKeyIterator {
             handle: &key.handle,
@@ -52,12 +54,14 @@ impl<'a> Iterator for RegKeyIterator<'a> {
     }
 }
 
+/// child key
 pub struct RegSubkey<'a> {
     name: String,
     parent: &'a [u16],
 }
 
 impl<'a> RegSubkey<'a> {
+    /// returns a `RegKey`
     pub fn open(&'a self) -> Result<RegKey, ()> {
         let parent = {
             let mut p = self.parent.to_vec();

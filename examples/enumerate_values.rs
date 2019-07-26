@@ -7,5 +7,7 @@ fn main() {
         RegKey::open(r"\Registry\Machine\Software\Microsoft\Windows\CurrentVersion\Run".to_owned())
             .unwrap();
     println!("Values:");
-    reg.enum_values().for_each(|k| println!("- {}", k));
+    reg.enum_values().for_each(|k| {
+        println!("- {}: {}", k, k.value());
+    });
 }

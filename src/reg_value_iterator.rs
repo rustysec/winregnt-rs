@@ -5,6 +5,7 @@ use std::os::windows::ffi::OsStringExt;
 use winapi::shared::minwindef::ULONG;
 use winapi::shared::ntdef::HANDLE;
 
+/// get an iterator of key values
 pub struct RegValueIterator<'a> {
     handle: &'a HANDLE,
     index: ULONG,
@@ -33,16 +34,19 @@ impl<'a> Iterator for RegValueIterator<'a> {
     }
 }
 
+/// defines a registry value (name and data)
 pub struct RegValueItem {
     name: Vec<u16>,
     value: RegValue,
 }
 
 impl RegValueItem {
+    /// returns the name of the value
     pub fn name(&self) -> String {
         OsString::from_wide(&self.name).into_string().unwrap()
     }
 
+    /// returns the `RegValue`
     pub fn value(&self) -> RegValue {
         self.value.clone()
     }

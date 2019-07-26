@@ -151,7 +151,7 @@ extern "system" {
     ) -> u32;
 }
 
-pub fn enumerate_value_key(handle: HANDLE, index: ULONG) -> Option<Vec<u8>> {
+pub(crate) fn enumerate_value_key(handle: HANDLE, index: ULONG) -> Option<Vec<u8>> {
     let mut result_length: ULONG = 0;
     unsafe {
         NtEnumerateValueKey(
@@ -180,7 +180,7 @@ pub fn enumerate_value_key(handle: HANDLE, index: ULONG) -> Option<Vec<u8>> {
     }
 }
 
-pub fn enumerate_key(handle: HANDLE, index: ULONG) -> Option<Vec<u8>> {
+pub(crate) fn enumerate_key(handle: HANDLE, index: ULONG) -> Option<Vec<u8>> {
     let mut result_length: ULONG = 0;
     unsafe {
         NtEnumerateKey(

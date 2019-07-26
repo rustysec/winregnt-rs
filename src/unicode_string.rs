@@ -4,7 +4,7 @@ use std::mem::zeroed;
 use std::os::windows::ffi::OsStrExt;
 use winapi::shared::ntdef::UNICODE_STRING;
 
-pub struct UnicodeString(pub UNICODE_STRING);
+pub(crate) struct UnicodeString(pub UNICODE_STRING);
 
 impl From<&str> for UnicodeString {
     fn from(input: &str) -> Self {
