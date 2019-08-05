@@ -5,4 +5,4 @@ authors = ["russ <russ@infocyte.com>"]
 edition = "2018"
 
 [dependencies]
-winapi = { version = "*", features = [ "ntdef", "winnt" ] }
+winapi = { version = "0.3", features = [ "ntdef", "winnt" ] }
