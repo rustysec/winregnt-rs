@@ -62,12 +62,16 @@ impl From<Vec<u8>> for RegValueItem {
     fn from(data: Vec<u8>) -> RegValueItem {
         let start = size_of::<KeyValueFullInformation>();
         let value: KeyValueFullInformation = unsafe { std::ptr::read(data.as_ptr() as *const _) };
-        let name = unsafe {
-            std::slice::from_raw_parts::<u16>(
-                data[start..].as_ptr() as _,
-                (value.name_length / 2) as usize,
-            )
+        let name = match data.len() > start + (value.name_length / 2) as usize {
+            true => unsafe {
+                std::slice::from_raw_parts::<u16>(
+                    data[start..].as_ptr() as _,
+                    (value.name_length / 2) as usize,
+                )
+            },
+            false => Vec::new(),
         };
+
         RegValueItem {
             name: name.to_vec(),
             value: RegValue::new(&value, &data),
