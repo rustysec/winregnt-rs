@@ -29,26 +29,40 @@ impl<'a> Iterator for RegKeyIterator<'a> {
 
     fn next(&mut self) -> Option<RegSubkey<'a>> {
         match enumerate_key(*self.handle, self.index) {
-            Some(data) => {
-                let value: KeyBasicInformation =
-                    unsafe { std::ptr::read(data.as_ptr() as *const _) };
-                let name: &[u16] = unsafe {
-                    std::slice::from_raw_parts(
-                        data[size_of::<KeyBasicInformation>()..].as_ptr() as _,
-                        (value.name_length / 2) as _,
-                    )
-                };
-                match OsString::from_wide(&name).into_string() {
-                    Ok(s) => {
-                        self.index += 1;
-                        Some(RegSubkey {
-                            name: s,
-                            parent: self.name,
-                        })
+            Some(data) => match data.len() >= size_of::<KeyBasicInformation>() {
+                true => {
+                    let value: KeyBasicInformation =
+                        unsafe { std::ptr::read(data.as_ptr() as *const _) };
+                    let name: Vec<u16> = {
+                        let length = (value.name_length / 2) as usize;
+                        let data = data
+                            .iter()
+                            .copied()
+                            .skip(size_of::<KeyBasicInformation>())
+                            .collect::<Vec<u8>>();
+
+                        match data.len() >= length {
+                            true => {
+                                unsafe { std::slice::from_raw_parts(data.as_ptr() as _, length) }
+                                    .to_vec()
+                            }
+                            false => Vec::new(),
+                        }
+                    };
+
+                    match OsString::from_wide(&name).into_string() {
+                        Ok(s) => {
+                            self.index += 1;
+                            Some(RegSubkey {
+                                name: s,
+                                parent: self.name,
+                            })
+                        }
+                        Err(_) => None,
                     }
-                    _ => None,
                 }
-            }
+                false => None,
+            },
             _ => None,
         }
     }
