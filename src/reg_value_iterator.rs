@@ -1,4 +1,5 @@
 use crate::api::*;
+use std::convert::TryFrom;
 use std::ffi::OsString;
 use std::mem::size_of;
 use std::os::windows::ffi::OsStringExt;
@@ -27,7 +28,7 @@ impl<'a> Iterator for RegValueIterator<'a> {
         match enumerate_value_key(*self.handle, self.index) {
             Some(data) => {
                 self.index += 1;
-                Some(RegValueItem::from(data))
+                RegValueItem::try_from(data).ok()
             }
             _ => None,
         }
@@ -58,19 +59,33 @@ impl std::fmt::Display for RegValueItem {
     }
 }
 
-impl From<Vec<u8>> for RegValueItem {
-    fn from(data: Vec<u8>) -> RegValueItem {
+impl TryFrom<Vec<u8>> for RegValueItem {
+    type Error = &'static str;
+
+    fn try_from(data: Vec<u8>) -> Result<Self, Self::Error> {
         let start = size_of::<KeyValueFullInformation>();
-        let value: KeyValueFullInformation = unsafe { std::ptr::read(data.as_ptr() as *const _) };
-        let name = unsafe {
-            std::slice::from_raw_parts::<u16>(
-                data[start..].as_ptr() as _,
-                (value.name_length / 2) as usize,
-            )
-        };
-        RegValueItem {
-            name: name.to_vec(),
-            value: RegValue::new(&value, &data),
+        match data.len() >= start {
+            true => {
+                let value: KeyValueFullInformation =
+                    unsafe { std::ptr::read(data.as_ptr() as *const _) };
+                let length = (value.name_length / 2) as usize;
+
+                let name_data = data.iter().copied().skip(start).collect::<Vec<u8>>();
+                match name_data.len() >= length {
+                    true => {
+                        let name = unsafe {
+                            std::slice::from_raw_parts::<u16>(name_data.as_ptr() as _, length)
+                        }
+                        .to_vec();
+                        Ok(RegValueItem {
+                            name,
+                            value: RegValue::new(&value, &data),
+                        })
+                    }
+                    false => Err("Name blob is too small to parse"),
+                }
+            }
+            false => Err("Data blob is too small to parse"),
         }
     }
 }
