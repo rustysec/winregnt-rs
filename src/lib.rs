@@ -25,8 +25,10 @@ pub struct RegKey {
 
 impl Drop for RegKey {
     fn drop(&mut self) {
-        unsafe {
-            NtClose(self.handle);
+        if !self.handle.is_null() {
+            unsafe {
+                NtClose(self.handle);
+            }
         }
     }
 }

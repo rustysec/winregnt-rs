@@ -42,10 +42,10 @@ impl<'a> Iterator for RegKeyIterator<'a> {
                             .collect::<Vec<u8>>();
 
                         match data.len() >= length {
-                            true => {
-                                unsafe { std::slice::from_raw_parts(data.as_ptr() as _, length) }
-                                    .to_vec()
+                            true => unsafe {
+                                std::slice::from_raw_parts::<u16>(data.as_ptr() as _, length)
                             }
+                            .to_vec(),
                             false => Vec::new(),
                         }
                     };
@@ -83,7 +83,7 @@ impl<'a> RegSubkey<'a> {
             p
         };
 
-        let mut s = OsString::from_wide(&parent).into_string().unwrap();
+        let mut s = OsString::from_wide(&parent).into_string().map_err(|_| ())?;
         s.push_str("\\");
         s.push_str(&self.name);
         RegKey::open(s)

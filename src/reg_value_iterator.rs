@@ -43,8 +43,10 @@ pub struct RegValueItem {
 
 impl RegValueItem {
     /// returns the name of the value
-    pub fn name(&self) -> String {
-        OsString::from_wide(&self.name).into_string().unwrap()
+    pub fn name(&self) -> Result<String, String> {
+        OsString::from_wide(&self.name)
+            .into_string()
+            .map_err(|_| format!("Cannot convert name to a string"))
     }
 
     /// returns the `RegValue`
@@ -55,7 +57,7 @@ impl RegValueItem {
 
 impl std::fmt::Display for RegValueItem {
     fn fmt(&self, fmt: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-        write!(fmt, "{}", self.name())
+        write!(fmt, "{}", self.name().unwrap_or(String::new()))
     }
 }
 
