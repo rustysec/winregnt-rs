@@ -35,7 +35,11 @@ impl RegValue {
                         info.data_length as usize / 2,
                     )
                 };
-                RegValue::String(OsString::from_wide(tmp).into_string().unwrap())
+                RegValue::String(
+                    OsString::from_wide(tmp)
+                        .into_string()
+                        .unwrap_or(String::new()),
+                )
             }
             _ => RegValue::Unknown,
         }
