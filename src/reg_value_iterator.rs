@@ -81,7 +81,8 @@ impl TryFrom<Vec<u8>> for RegValueItem {
                         .to_vec();
                         Ok(RegValueItem {
                             name,
-                            value: RegValue::new(&value, &data),
+                            value: RegValue::new(&value, &data)
+                                .map_err(|_| "Cannot parse value data")?,
                         })
                     }
                     false => Err("Name blob is too small to parse"),

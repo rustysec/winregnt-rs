@@ -25,23 +25,33 @@ impl ::std::fmt::Display for RegValue {
 }
 
 impl RegValue {
-    pub fn new(info: &KeyValueFullInformation, data: &[u8]) -> RegValue {
+    pub fn new(info: &KeyValueFullInformation, data: &[u8]) -> Result<RegValue, ()> {
         match info.value_type.into() {
-            ValueType::REG_NONE => RegValue::None,
+            ValueType::REG_NONE => Ok(RegValue::None),
             ValueType::REG_SZ | ValueType::REG_EXPAND_SZ => {
-                let tmp = unsafe {
-                    std::slice::from_raw_parts::<u16>(
-                        data[info.data_offset as usize..].as_ptr() as *const _,
-                        info.data_length as usize / 2,
-                    )
-                };
-                RegValue::String(
-                    OsString::from_wide(tmp)
-                        .into_string()
-                        .unwrap_or(String::new()),
-                )
+                let tmp_data = data
+                    .iter()
+                    .copied()
+                    .skip(info.data_offset as usize)
+                    .collect::<Vec<u8>>();
+                match tmp_data.len() >= info.data_length as usize {
+                    true => {
+                        let tmp = unsafe {
+                            std::slice::from_raw_parts::<u16>(
+                                tmp_data.as_ptr() as *const _,
+                                info.data_length as usize / 2,
+                            )
+                        };
+                        Ok(RegValue::String(
+                            OsString::from_wide(tmp)
+                                .into_string()
+                                .unwrap_or(String::new()),
+                        ))
+                    }
+                    false => Err(()),
+                }
             }
-            _ => RegValue::Unknown,
+            _ => Ok(RegValue::Unknown),
         }
     }
 }
