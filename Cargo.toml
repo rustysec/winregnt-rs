@@ -6,3 +6,4 @@ edition = "2018"
 
 [dependencies]
 winapi = { version = "0.3", features = [ "ntdef", "winnt" ] }
+widestring = "0.4"

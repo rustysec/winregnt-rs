@@ -1,5 +1,3 @@
-use std::ffi::OsString;
-use std::os::windows::ffi::OsStringExt;
 use std::ptr::null_mut;
 use winapi::shared::minwindef::{DWORD, PULONG, ULONG};
 use winapi::shared::ntdef::{HANDLE, OBJECT_ATTRIBUTES, UNICODE_STRING};
@@ -36,21 +34,28 @@ impl RegValue {
                     .collect::<Vec<u8>>();
                 match tmp_data.len() >= info.data_length as usize {
                     true => {
-                        let tmp = unsafe {
-                            std::slice::from_raw_parts::<u16>(
-                                tmp_data.as_ptr() as *const _,
-                                info.data_length as usize / 2,
-                            )
+                        let wstr = unsafe {
+                            widestring::U16CString::from_ptr_str(tmp_data.as_ptr() as *const _)
                         };
-                        Ok(RegValue::String(
-                            OsString::from_wide(tmp)
-                                .into_string()
-                                .unwrap_or(String::new()),
-                        ))
+                        wstr.to_string()
+                            .map(|s| RegValue::String(s))
+                            .map_err(|e| println!("to_string() failed: {}", e.to_string()))
                     }
                     false => Err(()),
                 }
             }
+            ValueType::REG_DWORD => match data.len() >= std::mem::size_of::<u32>() {
+                true => {
+                    let tmp_data = data
+                        .iter()
+                        .copied()
+                        .skip(info.data_offset as usize)
+                        .collect::<Vec<u8>>();
+                    let value: u32 = unsafe { std::ptr::read(tmp_data.as_ptr() as *const _) };
+                    Ok(RegValue::Dword(value))
+                }
+                false => Err(()),
+            },
             _ => Ok(RegValue::Unknown),
         }
     }
