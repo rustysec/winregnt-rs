@@ -1,9 +1,11 @@
 mod api;
+mod error;
 mod reg_key_iterator;
 mod reg_value_iterator;
 mod unicode_string;
 
 pub use crate::api::*;
+use crate::error::Error;
 use crate::reg_key_iterator::*;
 use crate::reg_value_iterator::*;
 use crate::unicode_string::*;
@@ -15,6 +17,8 @@ use winapi::shared::ntdef::{
     InitializeObjectAttributes, HANDLE, OBJECT_ATTRIBUTES, OBJ_CASE_INSENSITIVE,
 };
 use winapi::um::winnt::KEY_ALL_ACCESS;
+
+pub type Result<T> = std::result::Result<T, error::Error>;
 
 /// Entry point for all registry access
 pub struct RegKey {
@@ -41,13 +45,12 @@ impl RegKey {
     /// let reg = RegKey::open(r"\Registry\User").unwrap();
     /// ```
     ///
-    pub fn open<S: Into<String>>(name: S) -> Result<RegKey, ()> {
+    pub fn open<S: Into<String> + Clone>(name: S) -> Result<RegKey> {
+        let name = name.into();
         let mut key = RegKey {
             handle: unsafe { zeroed() },
             name: {
-                let mut t = OsString::from(name.into())
-                    .encode_wide()
-                    .collect::<Vec<u16>>();
+                let mut t = OsString::from(&name).encode_wide().collect::<Vec<u16>>();
                 t.push(0x00);
                 t
             },
@@ -67,7 +70,7 @@ impl RegKey {
         }
         match unsafe { NtOpenKey(&mut key.handle, KEY_ALL_ACCESS, &object_attr) } {
             0 => Ok(key),
-            _ => Err(()),
+            err => Err(Error::KeyError(name, err)),
         }
     }
 

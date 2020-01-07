@@ -31,6 +31,7 @@ impl RegValue {
                     .iter()
                     .copied()
                     .skip(info.data_offset as usize)
+                    .take(info.data_length as usize)
                     .collect::<Vec<u8>>();
                 match info.data_length > 0 && tmp_data.len() >= info.data_length as usize {
                     true => {

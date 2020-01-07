@@ -1,4 +1,4 @@
-use crate::api::*;
+use crate::{api::*, error, Result};
 use std::convert::TryFrom;
 use std::ffi::OsString;
 use std::mem::size_of;
@@ -43,10 +43,10 @@ pub struct RegValueItem {
 
 impl RegValueItem {
     /// returns the name of the value
-    pub fn name(&self) -> Result<String, String> {
+    pub fn name(&self) -> Result<String> {
         OsString::from_wide(&self.name)
             .into_string()
-            .map_err(|_| format!("Cannot convert name to a string"))
+            .map_err(|_| error::RegValueError::ConvertName.into())
     }
 
     /// returns the `RegValue`
@@ -62,9 +62,9 @@ impl std::fmt::Display for RegValueItem {
 }
 
 impl TryFrom<Vec<u8>> for RegValueItem {
-    type Error = &'static str;
+    type Error = error::Error;
 
-    fn try_from(data: Vec<u8>) -> Result<Self, Self::Error> {
+    fn try_from(data: Vec<u8>) -> std::result::Result<Self, Self::Error> {
         let start = size_of::<KeyValueFullInformation>();
         match data.len() >= start {
             true => {
@@ -78,17 +78,26 @@ impl TryFrom<Vec<u8>> for RegValueItem {
                         let name = unsafe {
                             std::slice::from_raw_parts::<u16>(name_data.as_ptr() as _, length)
                         }
-                        .to_vec();
+                        .to_vec()
+                        .into_iter()
+                        .filter(|i| *i > 0x0000)
+                        .collect::<Vec<u16>>();
+
                         Ok(RegValueItem {
                             name,
-                            value: RegValue::new(&value, &data)
-                                .map_err(|_| "Cannot parse value data")?,
+                            value: RegValue::new(&value, &data).map_err(|_| {
+                                Into::<error::Error>::into(error::RegValueError::ValueData)
+                            })?,
                         })
                     }
-                    false => Err("Name blob is too small to parse"),
+                    false => Err(Into::<error::Error>::into(
+                        error::RegValueError::SmallNameBlob,
+                    )),
                 }
             }
-            false => Err("Data blob is too small to parse"),
+            false => Err(Into::<error::Error>::into(
+                error::RegValueError::SmallDataBlob,
+            )),
         }
     }
 }

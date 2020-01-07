@@ -1,5 +1,8 @@
-use crate::api::*;
-use crate::RegKey;
+use crate::{
+    api::*,
+    error::{self, Error},
+    RegKey, Result,
+};
 use std::ffi::OsString;
 use std::mem::size_of;
 use std::os::windows::ffi::OsStringExt;
@@ -76,14 +79,16 @@ pub struct RegSubkey<'a> {
 
 impl<'a> RegSubkey<'a> {
     /// returns a `RegKey`
-    pub fn open(&'a self) -> Result<RegKey, ()> {
+    pub fn open(&'a self) -> Result<RegKey> {
         let parent = {
             let mut p = self.parent.to_vec();
             p.pop();
             p
         };
 
-        let mut s = OsString::from_wide(&parent).into_string().map_err(|_| ())?;
+        let mut s = OsString::from_wide(&parent)
+            .into_string()
+            .map_err(|_| Into::<Error>::into(error::SubKeyError::ConvertName))?;
         s.push_str("\\");
         s.push_str(&self.name);
         RegKey::open(s)
