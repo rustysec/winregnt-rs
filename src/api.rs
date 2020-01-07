@@ -32,7 +32,7 @@ impl RegValue {
                     .copied()
                     .skip(info.data_offset as usize)
                     .collect::<Vec<u8>>();
-                match tmp_data.len() >= info.data_length as usize {
+                match info.data_length > 0 && tmp_data.len() >= info.data_length as usize {
                     true => {
                         let wstr = unsafe {
                             widestring::U16CString::from_ptr_str(tmp_data.as_ptr() as *const _)
@@ -41,7 +41,7 @@ impl RegValue {
                             .map(|s| RegValue::String(s))
                             .map_err(|e| println!("to_string() failed: {}", e.to_string()))
                     }
-                    false => Err(()),
+                    false => Ok(RegValue::String(String::new())),
                 }
             }
             ValueType::REG_DWORD => match data.len() >= std::mem::size_of::<u32>() {
