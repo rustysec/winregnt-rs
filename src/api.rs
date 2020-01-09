@@ -1,3 +1,4 @@
+use crate::{error::RegValueError, Result};
 use std::ptr::null_mut;
 use winapi::shared::minwindef::{DWORD, PULONG, ULONG};
 use winapi::shared::ntdef::{HANDLE, OBJECT_ATTRIBUTES, UNICODE_STRING};
@@ -23,7 +24,7 @@ impl ::std::fmt::Display for RegValue {
 }
 
 impl RegValue {
-    pub fn new(info: &KeyValueFullInformation, data: &[u8]) -> Result<RegValue, ()> {
+    pub fn new(info: &KeyValueFullInformation, data: &[u8]) -> Result<RegValue> {
         match info.value_type.into() {
             ValueType::REG_NONE => Ok(RegValue::None),
             ValueType::REG_SZ | ValueType::REG_EXPAND_SZ => {
@@ -34,14 +35,18 @@ impl RegValue {
                     .take(info.data_length as usize)
                     .collect::<Vec<u8>>();
                 match info.data_length > 0 && tmp_data.len() >= info.data_length as usize {
-                    true => {
-                        let wstr = unsafe {
-                            widestring::U16CString::from_ptr_str(tmp_data.as_ptr() as *const _)
-                        };
-                        wstr.to_string()
-                            .map(|s| RegValue::String(s))
-                            .map_err(|e| println!("to_string() failed: {}", e.to_string()))
+                    true => unsafe {
+                        widestring::U16CString::from_ptr_with_nul(
+                            tmp_data.as_ptr() as *const _,
+                            info.data_length as _,
+                        )
                     }
+                    .map_err(|e| RegValueError::ValueData(e.to_string()).into())
+                    .and_then(|wstr| {
+                        wstr.to_string()
+                            .map_err(|e| RegValueError::ValueData(e.to_string()).into())
+                            .map(|s| RegValue::String(s))
+                    }),
                     false => Ok(RegValue::String(String::new())),
                 }
             }
@@ -55,7 +60,7 @@ impl RegValue {
                     let value: u32 = unsafe { std::ptr::read(tmp_data.as_ptr() as *const _) };
                     Ok(RegValue::Dword(value))
                 }
-                false => Err(()),
+                false => Err(RegValueError::UnknownType.into()),
             },
             _ => Ok(RegValue::Unknown),
         }

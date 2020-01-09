@@ -85,8 +85,10 @@ impl TryFrom<Vec<u8>> for RegValueItem {
 
                         Ok(RegValueItem {
                             name,
-                            value: RegValue::new(&value, &data).map_err(|_| {
-                                Into::<error::Error>::into(error::RegValueError::ValueData)
+                            value: RegValue::new(&value, &data).map_err(|e| {
+                                Into::<error::Error>::into(error::RegValueError::ValueData(
+                                    e.to_string(),
+                                ))
                             })?,
                         })
                     }

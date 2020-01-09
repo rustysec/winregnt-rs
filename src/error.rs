@@ -26,10 +26,12 @@ pub enum SubKeyError {
 pub enum RegValueError {
     #[error("Could not convert name into string")]
     ConvertName,
-    #[error("Could not parse value data")]
-    ValueData,
+    #[error("Could not parse value data: {0}")]
+    ValueData(String),
     #[error("Name blob is too small")]
     SmallNameBlob,
     #[error("Data blob is too small")]
     SmallDataBlob,
+    #[error("Encountered unsupported registry type")]
+    UnknownType,
 }
