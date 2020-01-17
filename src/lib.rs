@@ -1,4 +1,31 @@
+//! A Rust interface to `Nt*` series of windows registry APIs. [winreg](https://github.com/gentoo90/winreg-rs) is a
+//! fantastic library but uses the common (and friendly) win32 APIs to interact with the registry. This leaves
+//! some blind spots when dealing with `null` characters which are permitted by the `Nt` functions and _not_ by
+//! Win32. Some information about this can be found
+//! [here](https://docs.microsoft.com/en-us/sysinternals/downloads/reghide).
+//!
+//!
+//! ## Usage
+//! In your `cargo.toml`:
+//!
+//! ```toml
+//! winregnt = { git = "https://github.com/rustysec/winregnt-rs" }
+//! ```
+//!
+//! `main.rs`:
+//!
+//! ```rust
+//! use winregnt::RegKey;
+//!
+//! fn main() {
+//!     let key = RegKey::open(r"\Registry\Users").unwrap();
+//!     key.enum_keys().for_each(|k| println!("- {}", k));
+//! }
+//! ```
+//!
+
 #![cfg(target_os = "windows")]
+#![warn(missing_docs)]
 
 mod api;
 mod error;
@@ -7,7 +34,7 @@ mod reg_value_iterator;
 mod unicode_string;
 
 pub use crate::api::*;
-use crate::error::Error;
+pub use crate::error::*;
 use crate::reg_key_iterator::*;
 use crate::reg_value_iterator::*;
 use crate::unicode_string::*;
@@ -20,6 +47,7 @@ use winapi::shared::ntdef::{
 };
 use winapi::um::winnt::KEY_ALL_ACCESS;
 
+/// Result wrapping WinRegNt errors
 pub type Result<T> = std::result::Result<T, error::Error>;
 
 /// Entry point for all registry access

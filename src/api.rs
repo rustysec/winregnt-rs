@@ -7,9 +7,13 @@ use winapi::um::winnt::{ACCESS_MASK, LARGE_INTEGER, PVOID};
 /// Values read from registry keys
 #[derive(Clone, Debug)]
 pub enum RegValue {
+    /// No value
     None,
+    /// Value that can be represented as a string
     String(String),
+    /// DWORD
     Dword(DWORD),
+    /// Unknown or unsupported registry value type
     Unknown,
 }
 
@@ -24,7 +28,7 @@ impl ::std::fmt::Display for RegValue {
 }
 
 impl RegValue {
-    pub fn new(info: &KeyValueFullInformation, data: &[u8]) -> Result<RegValue> {
+    pub(crate) fn new(info: &KeyValueFullInformation, data: &[u8]) -> Result<RegValue> {
         match info.value_type.into() {
             ValueType::REG_NONE => Ok(RegValue::None),
             ValueType::REG_SZ | ValueType::REG_EXPAND_SZ => {
@@ -71,34 +75,71 @@ impl RegValue {
     }
 }
 
+/// The KEY_INFORMATION_CLASS enumeration type represents the type of information to supply about a registry key.
+///
+/// This library only implementes a subset of these features.
+///
+/// More information
+/// [here](https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/wdm/ne-wdm-_key_information_class)
 #[repr(C)]
 pub enum KeyInformationClass {
+    /// A KEY_BASIC_INFORMATION structure is supplied.
     KeyBasicInformation = 0,
+
+    /// A KEY_NODE_INFORMATION structure is supplied.
     KeyNodeInformation = 1,
+
+    /// A KEY_FULL_INFORMATION structure is supplied.
     KeyFullInformation = 2,
 }
 
+/// The KEY_VALUE_INFORMATION_CLASS enumeration type specifies the type of information to supply about the value of a registry key.
+///
+/// More information
+/// [here](https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/wdm/ne-wdm-_key_value_information_class)
 #[repr(C)]
 pub enum KeyValueInformationClass {
+    /// The information is stored as a KEY_VALUE_BASIC_INFORMATION structure.
     KeyValueBasicInformation = 0,
+
+    /// The information is stored as a KEY_VALUE_FULL_INFORMATION structure.
     KeyValueFullInformation = 1,
+
+    /// The information is stored as a KEY_VALUE_PARTIAL_INFORMATION structure.
     KeyValuePartialInformation = 2,
+
+    /// The information is stored as a KEY_VALUE_FULL_INFORMATION structure that is aligned to a 64-bit (that is, 8-byte) boundary in memory. If the caller-supplied buffer does not start on a 64-bit boundary, the information is stored starting at the first 64-bit boundary in the buffer.
     KeyValueFullInformationAlign64 = 3,
+
+    /// The information is stored as a KEY_VALUE_PARTIAL_INFORMATION structure that is aligned to a 64-bit (that is, 8-byte) boundary in memory. If the caller-supplied buffer does not start on a 64-bit boundary, the information is stored starting at the first 64-bit boundary in the buffer.
     KeyValuePartialInformationAlign64 = 4,
+
+    /// Unspecified in MSDN documentation
     KeyValueLayerInformation = 5,
+
+    /// The maximum value in this enumeration type.
     MaxKeyValueInfoClass = 6,
 }
 
+/// The KEY_BASIC_INFORMATION structure defines a subset of the full information that is available for a registry key.
+///
+/// More information
+/// [here](https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/wdm/ns-wdm-_key_basic_information)
 #[repr(C)]
 pub struct KeyBasicInformation {
+    /// The last time this key or any of its values changed. This time value is expressed in absolute system time format. Absolute system time is the number of 100-nanosecond intervals since the start of the year 1601 in the Gregorian calendar.
     pub last_write_time: LARGE_INTEGER,
+
+    /// Device and intermediate drivers should ignore this member.
     pub title_index: ULONG,
+
+    /// An array of wide characters that contains the name of the registry key. This character string is not null-terminated. Only the first element in this array is included in the KEY_BASIC_INFORMATION structure definition. The storage for the remaining elements in the array immediately follows this element.
     pub name_length: ULONG,
     // name field comes after this
 }
 
 impl KeyBasicInformation {
-    pub fn new(data: &[u8]) -> Result<Self> {
+    pub(crate) fn new(data: &[u8]) -> Result<Self> {
         use byteorder::{NativeEndian, ReadBytesExt};
 
         let mut cursor = std::io::Cursor::new(&data[std::mem::size_of::<LARGE_INTEGER>()..]);
@@ -116,51 +157,35 @@ impl KeyBasicInformation {
     }
 }
 
-#[repr(C)]
-pub struct KeyValueBasicInformation {
-    pub title_index: ULONG,
-    pub value_type: ULONG,
-    pub name_length: ULONG,
-    // name field comes after this
-}
-
-impl KeyValueBasicInformation {
-    pub fn new(data: &[u8]) -> Result<Self> {
-        use byteorder::{NativeEndian, ReadBytesExt};
-        let mut cursor = std::io::Cursor::new(data);
-
-        let this = Self {
-            title_index: cursor
-                .read_u32::<NativeEndian>()
-                .map_err(RegValueError::ReadKeyValueBasicInformation)?,
-            value_type: cursor
-                .read_u32::<NativeEndian>()
-                .map_err(RegValueError::ReadKeyValueBasicInformation)?,
-            name_length: cursor
-                .read_u32::<NativeEndian>()
-                .map_err(RegValueError::ReadKeyValueBasicInformation)?,
-        };
-        Ok(this)
-    }
-}
-
+/// The KEY_VALUE_FULL_INFORMATION structure defines information available for a value entry of a registry key.
+///
+/// More information
+/// [here](https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/wdm/ns-wdm-_key_value_full_information)
 #[repr(C)]
 pub struct KeyValueFullInformation {
-    pub title_length: ULONG,
+    /// Device and intermediate drivers should ignore this member.
+    _title_index: ULONG,
+
+    /// Specifies the system-defined type for the registry value(s) following the Name member. For a summary of these types, see KEY_VALUE_BASIC_INFORMATION.
     pub value_type: ULONG,
+
+    /// Specifies the offset from the start of this structure to the data immediately following the Name string.
     pub data_offset: ULONG,
+
+    /// Specifies the number of bytes of registry information for the value entry identified by Name.
     pub data_length: ULONG,
+
+    /// Specifies the size in bytes of the following value entry name.
     pub name_length: ULONG,
-    // name field comes after this
 }
 
 impl KeyValueFullInformation {
-    pub fn new(data: &[u8]) -> Result<Self> {
+    pub(crate) fn new(data: &[u8]) -> Result<Self> {
         use byteorder::{NativeEndian, ReadBytesExt};
         let mut cursor = std::io::Cursor::new(data);
 
         let this = Self {
-            title_length: cursor
+            _title_index: cursor
                 .read_u32::<NativeEndian>()
                 .map_err(RegValueError::ReadKeyValueFullInformation)?,
             value_type: cursor
@@ -183,7 +208,7 @@ impl KeyValueFullInformation {
 #[allow(non_camel_case_types)]
 #[repr(C)]
 #[derive(Debug, PartialEq, PartialOrd)]
-pub enum ValueType {
+pub(crate) enum ValueType {
     REG_NONE = 0,
     REG_SZ = 1,
     REG_EXPAND_SZ = 2,
