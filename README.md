@@ -1,4 +1,7 @@
-# WinRegNt
+WinRegNt
+==========
+[![Build Status](https://github.com/rustysec/winregnt-rs/workflows/Build/badge.svg)](https://github.com/rustysec/winregnt-rs/actions)
+
 A Rust interface to `Nt*` series of windows registry APIs. [winreg](https://github.com/gentoo90/winreg-rs) is a
 fantastic library but uses the common (and friendly) win32 APIs to interact with the registry. This leaves
 some blind spots when dealing with `null` characters which are permitted by the `Nt` functions and _not_ by
