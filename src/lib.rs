@@ -1,3 +1,5 @@
+#![cfg(target_os = "windows")]
+
 mod api;
 mod error;
 mod reg_key_iterator;

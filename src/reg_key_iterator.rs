@@ -32,40 +32,47 @@ impl<'a> Iterator for RegKeyIterator<'a> {
 
     fn next(&mut self) -> Option<RegSubkey<'a>> {
         match enumerate_key(*self.handle, self.index) {
-            Some(data) => match data.len() >= size_of::<KeyBasicInformation>() {
-                true => {
-                    let value: KeyBasicInformation =
-                        unsafe { std::ptr::read(data.as_ptr() as *const _) };
-                    let name: Vec<u16> = {
-                        let length = (value.name_length / 2) as usize;
-                        let data = data
-                            .iter()
-                            .copied()
-                            .skip(size_of::<KeyBasicInformation>())
-                            .collect::<Vec<u8>>();
+            Some(data) => {
+                if data.len() >= size_of::<KeyBasicInformation>() {
+                    match KeyBasicInformation::new(&data) {
+                        Ok(value) => {
+                            let name: Vec<u16> = {
+                                let length = (value.name_length / 2) as usize;
 
-                        match data.len() >= length {
-                            true => unsafe {
-                                std::slice::from_raw_parts::<u16>(data.as_ptr() as _, length)
+                                let data = data
+                                    .iter()
+                                    .copied()
+                                    .skip(size_of::<KeyBasicInformation>())
+                                    .take(value.name_length as _)
+                                    .collect::<Vec<u8>>();
+
+                                if data.len() >= length {
+                                    data.chunks_exact(2)
+                                        .map(|chunk| u16::from_ne_bytes([chunk[0], chunk[1]]))
+                                        .take(length)
+                                        .collect::<Vec<u16>>()
+                                } else {
+                                    Vec::new()
+                                }
+                            };
+
+                            match OsString::from_wide(&name).into_string() {
+                                Ok(s) => {
+                                    self.index += 1;
+                                    Some(RegSubkey {
+                                        name: s,
+                                        parent: self.name,
+                                    })
+                                }
+                                Err(_) => None,
                             }
-                            .to_vec(),
-                            false => Vec::new(),
                         }
-                    };
-
-                    match OsString::from_wide(&name).into_string() {
-                        Ok(s) => {
-                            self.index += 1;
-                            Some(RegSubkey {
-                                name: s,
-                                parent: self.name,
-                            })
-                        }
-                        Err(_) => None,
+                        _ => None,
                     }
+                } else {
+                    None
                 }
-                false => None,
-            },
+            }
             _ => None,
         }
     }

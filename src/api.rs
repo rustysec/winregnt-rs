@@ -34,40 +34,43 @@ impl RegValue {
                     .skip(info.data_offset as usize)
                     .take(info.data_length as usize)
                     .collect::<Vec<u8>>();
-                match info.data_length > 0 && tmp_data.len() >= info.data_length as usize {
-                    true => unsafe {
-                        widestring::U16CString::from_ptr_with_nul(
-                            tmp_data.as_ptr() as *const _,
-                            info.data_length as _,
-                        )
-                    }
-                    .map_err(|e| RegValueError::ValueData(e.to_string()).into())
-                    .and_then(|wstr| {
-                        wstr.to_string()
-                            .map_err(|e| RegValueError::ValueData(e.to_string()).into())
-                            .map(|s| RegValue::String(s))
-                    }),
-                    false => Ok(RegValue::String(String::new())),
+                if info.data_length > 0 && tmp_data.len() >= info.data_length as usize {
+                    let wide_data = tmp_data
+                        .chunks_exact(2)
+                        .map(|chunk| u16::from_ne_bytes([chunk[0], chunk[1]]))
+                        .collect::<Vec<_>>();
+                    widestring::U16Str::from_slice(&wide_data)
+                        .to_ustring()
+                        .to_string()
+                        .map(RegValue::String)
+                        .map_err(|e| e.into())
+                } else {
+                    Ok(RegValue::String(String::new()))
                 }
             }
-            ValueType::REG_DWORD => match data.len() >= std::mem::size_of::<u32>() {
-                true => {
+            ValueType::REG_DWORD => {
+                if data.len() >= std::mem::size_of::<u32>() {
                     let tmp_data = data
                         .iter()
                         .copied()
                         .skip(info.data_offset as usize)
                         .collect::<Vec<u8>>();
-                    let value: u32 = unsafe { std::ptr::read(tmp_data.as_ptr() as *const _) };
-                    Ok(RegValue::Dword(value))
+
+                    tmp_data
+                        .chunks_exact(4)
+                        .map(|chunk| u32::from_ne_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
+                        .next()
+                        .map(RegValue::Dword)
+                        .ok_or_else(|| RegValueError::DwordConversion.into())
+                } else {
+                    Err(RegValueError::UnknownType.into())
                 }
-                false => Err(RegValueError::UnknownType.into()),
-            },
+            }
             _ => Ok(RegValue::Unknown),
         }
     }
 }
 
-#[allow(dead_code)]
 #[repr(C)]
 pub enum KeyInformationClass {
     KeyBasicInformation = 0,
@@ -75,7 +78,6 @@ pub enum KeyInformationClass {
     KeyFullInformation = 2,
 }
 
-#[allow(dead_code)]
 #[repr(C)]
 pub enum KeyValueInformationClass {
     KeyValueBasicInformation = 0,
@@ -95,6 +97,25 @@ pub struct KeyBasicInformation {
     // name field comes after this
 }
 
+impl KeyBasicInformation {
+    pub fn new(data: &[u8]) -> Result<Self> {
+        use byteorder::{NativeEndian, ReadBytesExt};
+
+        let mut cursor = std::io::Cursor::new(&data[std::mem::size_of::<LARGE_INTEGER>()..]);
+
+        let this = Self {
+            last_write_time: unsafe { std::mem::zeroed() },
+            title_index: cursor
+                .read_u32::<NativeEndian>()
+                .map_err(RegValueError::ReadKeyBasicInformation)?,
+            name_length: cursor
+                .read_u32::<NativeEndian>()
+                .map_err(RegValueError::ReadKeyBasicInformation)?,
+        };
+        Ok(this)
+    }
+}
+
 #[repr(C)]
 pub struct KeyValueBasicInformation {
     pub title_index: ULONG,
@@ -103,6 +124,27 @@ pub struct KeyValueBasicInformation {
     // name field comes after this
 }
 
+impl KeyValueBasicInformation {
+    pub fn new(data: &[u8]) -> Result<Self> {
+        use byteorder::{NativeEndian, ReadBytesExt};
+        let mut cursor = std::io::Cursor::new(data);
+
+        let this = Self {
+            title_index: cursor
+                .read_u32::<NativeEndian>()
+                .map_err(RegValueError::ReadKeyValueBasicInformation)?,
+            value_type: cursor
+                .read_u32::<NativeEndian>()
+                .map_err(RegValueError::ReadKeyValueBasicInformation)?,
+            name_length: cursor
+                .read_u32::<NativeEndian>()
+                .map_err(RegValueError::ReadKeyValueBasicInformation)?,
+        };
+        Ok(this)
+    }
+}
+
+#[repr(C)]
 pub struct KeyValueFullInformation {
     pub title_length: ULONG,
     pub value_type: ULONG,
@@ -110,6 +152,32 @@ pub struct KeyValueFullInformation {
     pub data_length: ULONG,
     pub name_length: ULONG,
     // name field comes after this
+}
+
+impl KeyValueFullInformation {
+    pub fn new(data: &[u8]) -> Result<Self> {
+        use byteorder::{NativeEndian, ReadBytesExt};
+        let mut cursor = std::io::Cursor::new(data);
+
+        let this = Self {
+            title_length: cursor
+                .read_u32::<NativeEndian>()
+                .map_err(RegValueError::ReadKeyValueFullInformation)?,
+            value_type: cursor
+                .read_u32::<NativeEndian>()
+                .map_err(RegValueError::ReadKeyValueFullInformation)?,
+            data_offset: cursor
+                .read_u32::<NativeEndian>()
+                .map_err(RegValueError::ReadKeyValueFullInformation)?,
+            data_length: cursor
+                .read_u32::<NativeEndian>()
+                .map_err(RegValueError::ReadKeyValueFullInformation)?,
+            name_length: cursor
+                .read_u32::<NativeEndian>()
+                .map_err(RegValueError::ReadKeyValueFullInformation)?,
+        };
+        Ok(this)
+    }
 }
 
 #[allow(non_camel_case_types)]
