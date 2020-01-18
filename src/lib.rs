@@ -74,7 +74,7 @@ impl RegKey {
     /// # Examples
     ///
     /// ```
-    /// use crate::RegKey;
+    /// use winregnt::RegKey;
     /// assert!(RegKey::open(r"\Registry\Machine\Software\Microsoft\Windows\CurrentVersion\Run").is_ok());
     /// ```
     ///
