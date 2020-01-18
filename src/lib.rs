@@ -14,11 +14,12 @@
 //!
 //! `main.rs`:
 //!
-//! ```rust
+//! ```no_run
 //! use winregnt::RegKey;
 //!
 //! fn main() {
-//!     let key = RegKey::open(r"\Registry\Users").unwrap();
+//!     let key =
+//!         RegKey::open(r"\Registry\Machine\Software\Microsoft\Windows\CurrentVersion\Run").unwrap();
 //!     key.enum_keys().for_each(|k| println!("- {}", k));
 //! }
 //! ```
@@ -71,8 +72,10 @@ impl RegKey {
     /// opens a registry key
     ///
     /// # Examples
+    ///
     /// ```
-    /// let reg = RegKey::open(r"\Registry\User").unwrap();
+    /// use crate::RegKey;
+    /// assert!(RegKey::open(r"\Registry\Machine\Software\Microsoft\Windows\CurrentVersion\Run").is_ok());
     /// ```
     ///
     pub fn open<S: Into<String> + Clone>(name: S) -> Result<RegKey> {
