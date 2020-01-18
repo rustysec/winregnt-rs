@@ -14,10 +14,7 @@ pub struct RegValueIterator<'a> {
 
 impl<'a> RegValueIterator<'a> {
     pub fn new(handle: &'a HANDLE) -> RegValueIterator<'a> {
-        RegValueIterator {
-            handle: handle,
-            index: 0,
-        }
+        RegValueIterator { handle, index: 0 }
     }
 }
 
@@ -57,7 +54,7 @@ impl RegValueItem {
 
 impl std::fmt::Display for RegValueItem {
     fn fmt(&self, fmt: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-        write!(fmt, "{}", self.name().unwrap_or(String::new()))
+        write!(fmt, "{}", self.name().unwrap_or_default())
     }
 }
 
@@ -66,40 +63,34 @@ impl TryFrom<Vec<u8>> for RegValueItem {
 
     fn try_from(data: Vec<u8>) -> std::result::Result<Self, Self::Error> {
         let start = size_of::<KeyValueFullInformation>();
-        match data.len() >= start {
-            true => {
-                let value: KeyValueFullInformation =
-                    unsafe { std::ptr::read(data.as_ptr() as *const _) };
-                let length = (value.name_length / 2) as usize;
+        if data.len() >= start {
+            let value = KeyValueFullInformation::new(&data).map_err(Into::<Self::Error>::into)?;
 
-                let name_data = data.iter().copied().skip(start).collect::<Vec<u8>>();
-                match name_data.len() >= length {
-                    true => {
-                        let name = unsafe {
-                            std::slice::from_raw_parts::<u16>(name_data.as_ptr() as _, length)
-                        }
-                        .to_vec()
-                        .into_iter()
-                        .filter(|i| *i > 0x0000)
-                        .collect::<Vec<u16>>();
+            let length = (value.name_length / 2) as usize;
 
-                        Ok(RegValueItem {
-                            name,
-                            value: RegValue::new(&value, &data).map_err(|e| {
-                                Into::<error::Error>::into(error::RegValueError::ValueData(
-                                    e.to_string(),
-                                ))
-                            })?,
-                        })
-                    }
-                    false => Err(Into::<error::Error>::into(
-                        error::RegValueError::SmallNameBlob,
-                    )),
-                }
+            let name_data = data.iter().copied().skip(start).collect::<Vec<u8>>();
+            if name_data.len() >= length {
+                let name = name_data
+                    .chunks_exact(2)
+                    .map(|chunk| u16::from_ne_bytes([chunk[0], chunk[1]]))
+                    .take(length)
+                    .collect::<Vec<u16>>();
+
+                Ok(RegValueItem {
+                    name,
+                    value: RegValue::new(&value, &data).map_err(|e| {
+                        Into::<error::Error>::into(error::RegValueError::ValueData(e.to_string()))
+                    })?,
+                })
+            } else {
+                Err(Into::<error::Error>::into(
+                    error::RegValueError::SmallNameBlob,
+                ))
             }
-            false => Err(Into::<error::Error>::into(
+        } else {
+            Err(Into::<error::Error>::into(
                 error::RegValueError::SmallDataBlob,
-            )),
+            ))
         }
     }
 }
@@ -110,8 +101,7 @@ mod tests {
     fn enumerate() {
         use crate::RegKey;
         let key =
-            RegKey::open(r"\Registry\Machine\Software\Microsoft\Windows\CurrentVersion".to_owned())
-                .unwrap();
+            RegKey::open(r"\Registry\Machine\Software\Microsoft\Windows\CurrentVersion").unwrap();
         let mut iter = key.enum_values();
         assert!(iter.next().is_some());
     }
