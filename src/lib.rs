@@ -45,7 +45,7 @@ use std::ptr::null_mut;
 use winapi::shared::ntdef::{
     InitializeObjectAttributes, HANDLE, OBJECT_ATTRIBUTES, OBJ_CASE_INSENSITIVE,
 };
-use winapi::um::winnt::KEY_ALL_ACCESS;
+use winapi::um::winnt::KEY_READ;
 
 /// Result wrapping WinRegNt errors
 pub type Result<T> = std::result::Result<T, error::Error>;
@@ -98,7 +98,7 @@ impl RegKey {
                 null_mut(),
             );
         }
-        match unsafe { NtOpenKey(&mut key.handle, KEY_ALL_ACCESS, &object_attr) } {
+        match unsafe { NtOpenKey(&mut key.handle, KEY_READ, &object_attr) } {
             0 => Ok(key),
             err => Err(Error::KeyError(name, err)),
         }
@@ -120,13 +120,9 @@ mod tests {
     #[test]
     fn open() {
         use crate::RegKey;
-        match RegKey::open(
-            r"\Registry\Machine\Software\Microsoft\Windows\CurrentVersion\Run".to_owned(),
-        ) {
-            Ok(_) => {
-                assert!(true);
-            }
-            _ => assert!(false),
-        }
+        assert!(
+            RegKey::open(r"\Registry\Machine\Software\Microsoft\Windows\CurrentVersion\Run",)
+                .is_ok()
+        );
     }
 }

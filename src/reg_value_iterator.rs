@@ -101,8 +101,7 @@ mod tests {
     fn enumerate() {
         use crate::RegKey;
         let key =
-            RegKey::open(r"\Registry\Machine\Software\Microsoft\Windows\CurrentVersion".to_owned())
-                .unwrap();
+            RegKey::open(r"\Registry\Machine\Software\Microsoft\Windows\CurrentVersion").unwrap();
         let mut iter = key.enum_values();
         assert!(iter.next().is_some());
     }
