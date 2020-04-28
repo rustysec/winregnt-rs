@@ -1,8 +1,12 @@
 use crate::{error::RegValueError, Result};
 use std::ptr::null_mut;
-use winapi::shared::minwindef::{DWORD, PULONG, ULONG};
-use winapi::shared::ntdef::{HANDLE, OBJECT_ATTRIBUTES, UNICODE_STRING};
-use winapi::um::winnt::{ACCESS_MASK, LARGE_INTEGER, PVOID};
+use winapi::{
+    shared::{
+        minwindef::{DWORD, PULONG, ULONG},
+        ntdef::{HANDLE, OBJECT_ATTRIBUTES, UNICODE_STRING},
+    },
+    um::winnt::{ACCESS_MASK, LARGE_INTEGER, PVOID},
+};
 
 /// Values read from registry keys
 #[derive(Clone, Debug)]
@@ -13,6 +17,10 @@ pub enum RegValue {
     String(String),
     /// DWORD
     Dword(DWORD),
+    /// QWORD
+    Qword(u64),
+    /// Binary data
+    Binary(Vec<u8>),
     /// Unknown or unsupported registry value type
     Unknown,
 }
@@ -22,6 +30,8 @@ impl ::std::fmt::Display for RegValue {
         match self {
             RegValue::String(ref v) => write!(fmt, "{}", v),
             RegValue::Dword(ref v) => write!(fmt, "{}", v),
+            RegValue::Qword(ref v) => write!(fmt, "{}", v),
+            RegValue::Binary(ref v) => write!(fmt, "{:?}", v),
             v => write!(fmt, "? {:?}", v),
         }
     }
@@ -38,12 +48,19 @@ impl RegValue {
                     .skip(info.data_offset as usize)
                     .take(info.data_length as usize)
                     .collect::<Vec<u8>>();
+                if info.data_length as usize != tmp_data.len() {
+                    println!(
+                        "data_length: {}, actual: {}",
+                        info.data_length,
+                        tmp_data.len()
+                    );
+                }
                 if info.data_length > 0 && tmp_data.len() >= info.data_length as usize {
                     let wide_data = tmp_data
                         .chunks_exact(2)
                         .map(|chunk| u16::from_ne_bytes([chunk[0], chunk[1]]))
                         .collect::<Vec<_>>();
-                    widestring::U16Str::from_slice(&wide_data)
+                    widestring::U16String::from_vec(wide_data)
                         .to_ustring()
                         .to_string()
                         .map(RegValue::String)
@@ -69,6 +86,56 @@ impl RegValue {
                 } else {
                     Err(RegValueError::UnknownType.into())
                 }
+            }
+            ValueType::REG_DWORD_BIG_ENDIAN => {
+                if data.len() >= std::mem::size_of::<u32>() {
+                    let tmp_data = data
+                        .iter()
+                        .copied()
+                        .skip(info.data_offset as usize)
+                        .collect::<Vec<u8>>();
+
+                    tmp_data
+                        .chunks_exact(4)
+                        .map(|chunk| u32::from_be_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
+                        .next()
+                        .map(RegValue::Dword)
+                        .ok_or_else(|| RegValueError::DwordConversion.into())
+                } else {
+                    Err(RegValueError::UnknownType.into())
+                }
+            }
+            ValueType::REG_QWORD => {
+                if data.len() >= std::mem::size_of::<u64>() {
+                    let tmp_data = data
+                        .iter()
+                        .copied()
+                        .skip(info.data_offset as usize)
+                        .collect::<Vec<u8>>();
+
+                    tmp_data
+                        .chunks_exact(8)
+                        .map(|chunk| {
+                            u64::from_ne_bytes([
+                                chunk[0], chunk[1], chunk[2], chunk[3], chunk[4], chunk[5],
+                                chunk[6], chunk[7],
+                            ])
+                        })
+                        .next()
+                        .map(RegValue::Qword)
+                        .ok_or_else(|| RegValueError::DwordConversion.into())
+                } else {
+                    Err(RegValueError::UnknownType.into())
+                }
+            }
+            ValueType::REG_BINARY => {
+                let tmp_data = data
+                    .iter()
+                    .copied()
+                    .skip(info.data_offset as usize)
+                    .collect::<Vec<u8>>();
+
+                Ok(RegValue::Binary(tmp_data))
             }
             _ => Ok(RegValue::Unknown),
         }
