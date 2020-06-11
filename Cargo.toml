@@ -7,5 +7,5 @@ edition = "2018"
 [dependencies]
 byteorder = "1"
 thiserror = "1"
-winapi = { version = "0.3", features = [ "ntdef", "winnt" ] }
+winapi = { version = "0.3", features = [ "ntdef", "winnt", "ntstatus" ] }
 widestring = "0.4"

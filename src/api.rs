@@ -334,6 +334,8 @@ extern "system" {
         access: ACCESS_MASK,
         attr: *const OBJECT_ATTRIBUTES,
     ) -> u32;
+    pub fn NtDeleteValueKey(handle: HANDLE, value_name: *mut UNICODE_STRING) -> u32;
+    pub fn NtDeleteKey(handle: HANDLE) -> u32;
 }
 
 pub(crate) fn enumerate_value_key(handle: HANDLE, index: ULONG) -> Option<Vec<u8>> {
