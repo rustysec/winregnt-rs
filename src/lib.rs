@@ -49,7 +49,8 @@ use winapi::{
         },
     },
     um::winnt::{
-        DELETE, KEY_READ, KEY_SET_VALUE, KEY_WRITE, REG_BINARY, REG_DWORD, REG_QWORD, REG_SZ,
+        DELETE, KEY_READ, KEY_SET_VALUE, KEY_WRITE, REG_BINARY, REG_DWORD, REG_NONE, REG_QWORD,
+        REG_SZ,
     },
 };
 
@@ -184,8 +185,7 @@ impl RegKey {
             )
         } {
             0 => Ok(()),
-
-            _ => Ok(()),
+            err => Err(RegValueError::Write(err).into()),
         }
     }
 
@@ -246,6 +246,28 @@ impl RegKey {
                 REG_QWORD,
                 &mut value.clone() as *const _ as *mut _,
                 std::mem::size_of::<u64>() as _,
+            )
+        } {
+            0 => Ok(()),
+            err => Err(RegValueError::Write(err).into()),
+        }
+    }
+
+    /// Create or update a `NONE` value `name` with `value`
+    pub fn write_none_value<S: AsRef<str>, V: AsRef<[u8]>>(
+        &mut self,
+        name: S,
+        value: V,
+    ) -> Result<()> {
+        let unicode_name = UnicodeString::from(name.as_ref());
+        match unsafe {
+            NtSetValueKey(
+                self.handle,
+                &unicode_name.0 as *const _ as *mut _,
+                0,
+                REG_NONE,
+                value.as_ref() as *const _ as *mut _,
+                value.as_ref().len() as _,
             )
         } {
             0 => Ok(()),
