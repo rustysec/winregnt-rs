@@ -94,6 +94,10 @@ pub enum RegValueError {
     /// The specified value name was not found
     #[error("Could not operate on value, the specified name was not found")]
     NameNotFound,
+
+    /// Unable to write a value
+    #[error("Unable to write value to registry key: {0}")]
+    Write(u32),
 }
 
 /// Errors while operating on a registry key

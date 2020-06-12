@@ -336,6 +336,14 @@ extern "system" {
     ) -> u32;
     pub fn NtDeleteValueKey(handle: HANDLE, value_name: *mut UNICODE_STRING) -> u32;
     pub fn NtDeleteKey(handle: HANDLE) -> u32;
+    pub fn NtSetValueKey(
+        KeyHandle: HANDLE,
+        ValueName: *mut UNICODE_STRING,
+        TitleIndex: ULONG,
+        Type: ULONG,
+        Data: PVOID,
+        DataSize: ULONG,
+    ) -> u32;
 }
 
 pub(crate) fn enumerate_value_key(handle: HANDLE, index: ULONG) -> Option<Vec<u8>> {
