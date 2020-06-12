@@ -100,6 +100,22 @@ impl<'a> RegSubkey<'a> {
         s.push_str(&self.name);
         RegKey::open(s)
     }
+
+    /// returns a `RegKey`
+    pub fn open_write(&'a self) -> Result<RegKey> {
+        let parent = {
+            let mut p = self.parent.to_vec();
+            p.pop();
+            p
+        };
+
+        let mut s = OsString::from_wide(&parent)
+            .into_string()
+            .map_err(|_| Into::<Error>::into(error::SubKeyError::ConvertName))?;
+        s.push_str("\\");
+        s.push_str(&self.name);
+        RegKey::open_write(s)
+    }
 }
 
 impl<'a> ::std::fmt::Display for RegSubkey<'a> {

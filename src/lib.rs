@@ -48,7 +48,7 @@ use winapi::{
             STATUS_OBJECT_NAME_NOT_FOUND,
         },
     },
-    um::winnt::{KEY_READ, KEY_WRITE},
+    um::winnt::{DELETE, KEY_READ, KEY_SET_VALUE, KEY_WRITE},
 };
 
 /// Result wrapping WinRegNt errors
@@ -95,7 +95,7 @@ impl RegKey {
     /// ```
     ///
     pub fn open_write<S: AsRef<str>>(name: S) -> Result<RegKey> {
-        Self::open_key(name, KEY_WRITE)
+        Self::open_key(name, KEY_WRITE | DELETE | KEY_SET_VALUE)
     }
 
     /// get an sub key enumerator
@@ -119,8 +119,10 @@ impl RegKey {
 
     /// delete a value
     pub fn delete_value<S: AsRef<str>>(&self, value_name: S) -> Result<()> {
-        let mut unicode_string = UnicodeString::from(value_name.as_ref());
-        match unsafe { NtDeleteValueKey(self.handle, &mut unicode_string.0) } as i32 {
+        let unicode_string = UnicodeString::from(value_name.as_ref());
+        match unsafe { NtDeleteValueKey(self.handle, &unicode_string.0 as *const _ as *mut _) }
+            as i32
+        {
             STATUS_ACCESS_DENIED => Err(crate::error::RegValueError::AccessDenied.into()),
             STATUS_INSUFFICIENT_RESOURCES => {
                 Err(crate::error::RegValueError::InsufficientResources.into())
