@@ -39,14 +39,20 @@ pub use crate::error::*;
 use crate::reg_key_iterator::*;
 use crate::reg_value_iterator::*;
 use crate::unicode_string::*;
-use std::ffi::OsString;
-use std::mem::zeroed;
-use std::os::windows::ffi::OsStrExt;
-use std::ptr::null_mut;
-use winapi::shared::ntdef::{
-    InitializeObjectAttributes, HANDLE, OBJECT_ATTRIBUTES, OBJ_CASE_INSENSITIVE,
+use std::{ffi::OsString, mem::zeroed, os::windows::ffi::OsStrExt, ptr::null_mut};
+use winapi::{
+    shared::{
+        ntdef::{InitializeObjectAttributes, HANDLE, OBJECT_ATTRIBUTES, OBJ_CASE_INSENSITIVE},
+        ntstatus::{
+            STATUS_ACCESS_DENIED, STATUS_INSUFFICIENT_RESOURCES, STATUS_INVALID_HANDLE,
+            STATUS_OBJECT_NAME_NOT_FOUND,
+        },
+    },
+    um::winnt::{
+        DELETE, KEY_READ, KEY_SET_VALUE, KEY_WRITE, REG_BINARY, REG_DWORD, REG_NONE, REG_QWORD,
+        REG_SZ,
+    },
 };
-use winapi::um::winnt::KEY_READ;
 
 /// Result wrapping WinRegNt errors
 pub type Result<T> = std::result::Result<T, error::Error>;
@@ -69,7 +75,7 @@ impl Drop for RegKey {
 }
 
 impl RegKey {
-    /// opens a registry key
+    /// opens a registry key as read only
     ///
     /// # Examples
     ///
@@ -78,16 +84,69 @@ impl RegKey {
     /// assert!(RegKey::open(r"\Registry\Machine\Software\Microsoft\Windows\CurrentVersion\Run").is_ok());
     /// ```
     ///
-    pub fn open<S: Into<String> + Clone>(name: S) -> Result<RegKey> {
-        let name = name.into();
+    pub fn open<S: AsRef<str>>(name: S) -> Result<RegKey> {
+        Self::open_key(name, KEY_READ)
+    }
+
+    /// opens a registry key with write permissions
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use winregnt::RegKey;
+    /// assert!(RegKey::open_write(r"\Registry\Machine\Software\Microsoft\Windows\CurrentVersion\Run").is_ok());
+    /// ```
+    ///
+    pub fn open_write<S: AsRef<str>>(name: S) -> Result<RegKey> {
+        Self::open_key(name, KEY_WRITE | DELETE | KEY_SET_VALUE)
+    }
+
+    /// get an sub key enumerator
+    pub fn enum_keys(&self) -> RegKeyIterator {
+        RegKeyIterator::new(&self)
+    }
+
+    /// get a key value iterator
+    pub fn enum_values(&self) -> RegValueIterator {
+        RegValueIterator::new(&self.handle)
+    }
+
+    /// delete the current key
+    pub fn delete(&self) -> Result<()> {
+        match unsafe { api::NtDeleteKey(self.handle) } as i32 {
+            STATUS_ACCESS_DENIED => Err(RegKeyError::DeleteAccessDenied.into()),
+            STATUS_INVALID_HANDLE => Err(RegKeyError::DeleteInvalidHandle.into()),
+            _ => Ok(()),
+        }
+    }
+
+    /// delete a value
+    pub fn delete_value<S: AsRef<str>>(&self, value_name: S) -> Result<()> {
+        let unicode_string = UnicodeString::from(value_name.as_ref());
+        match unsafe { NtDeleteValueKey(self.handle, &unicode_string.0 as *const _ as *mut _) }
+            as i32
+        {
+            STATUS_ACCESS_DENIED => Err(crate::error::RegValueError::AccessDenied.into()),
+            STATUS_INSUFFICIENT_RESOURCES => {
+                Err(crate::error::RegValueError::InsufficientResources.into())
+            }
+            STATUS_INVALID_HANDLE => Err(RegValueError::InvalidHandle.into()),
+            STATUS_OBJECT_NAME_NOT_FOUND => Err(RegValueError::NameNotFound.into()),
+            _ => Ok(()),
+        }
+    }
+
+    fn open_key<S: AsRef<str>>(name: S, permission: u32) -> Result<RegKey> {
         let mut key = RegKey {
             handle: unsafe { zeroed() },
             name: {
-                let mut t = OsString::from(&name).encode_wide().collect::<Vec<u16>>();
+                let mut t = OsString::from(name.as_ref())
+                    .encode_wide()
+                    .collect::<Vec<u16>>();
                 t.push(0x00);
                 t
             },
-            u: unsafe { zeroed() },
+            u: Default::default(),
         };
         key.u = UnicodeString::from(&key.name);
 
@@ -101,20 +160,119 @@ impl RegKey {
                 null_mut(),
             );
         }
-        match unsafe { NtOpenKey(&mut key.handle, KEY_READ, &object_attr) } {
+
+        match unsafe { NtOpenKey(&mut key.handle, permission, &object_attr) } {
             0 => Ok(key),
-            err => Err(Error::KeyError(name, err)),
+            err => Err(Error::KeyError(name.as_ref().to_string(), err)),
         }
     }
 
-    /// get an sub key enumerator
-    pub fn enum_keys(&self) -> RegKeyIterator {
-        RegKeyIterator::new(&self)
+    /// Create or update a binary value `name` with `value`
+    pub fn write_binary_value<S: AsRef<str>, V: AsRef<[u8]>>(
+        &mut self,
+        name: S,
+        value: V,
+    ) -> Result<()> {
+        let unicode_name = UnicodeString::from(name.as_ref());
+        match unsafe {
+            NtSetValueKey(
+                self.handle,
+                &unicode_name.0 as *const _ as *mut _,
+                0,
+                REG_BINARY,
+                value.as_ref() as *const _ as *mut _,
+                value.as_ref().len() as _,
+            )
+        } {
+            0 => Ok(()),
+            err => Err(RegValueError::Write(err).into()),
+        }
     }
 
-    /// get a key value iterator
-    pub fn enum_values(&self) -> RegValueIterator {
-        RegValueIterator::new(&self.handle)
+    /// Create or update a binary value `name` with `value`
+    pub fn write_string_value<S: AsRef<str>, V: AsRef<str>>(
+        &mut self,
+        name: S,
+        value: V,
+    ) -> Result<()> {
+        let unicode_name = UnicodeString::from(name.as_ref());
+
+        let mut o = OsString::from(value.as_ref())
+            .encode_wide()
+            .collect::<Vec<u16>>();
+        o.push(0x00);
+
+        match unsafe {
+            NtSetValueKey(
+                self.handle,
+                &unicode_name.0 as *const _ as *mut _,
+                0,
+                REG_SZ,
+                o.as_mut_ptr() as _,
+                (o.len() * 2) as _,
+            )
+        } {
+            0 => Ok(()),
+            err => Err(RegValueError::Write(err).into()),
+        }
+    }
+
+    /// Create or update a binary value `name` with `value`
+    pub fn write_dword_value<S: AsRef<str>>(&mut self, name: S, value: u32) -> Result<()> {
+        let unicode_name = UnicodeString::from(name.as_ref());
+        match unsafe {
+            NtSetValueKey(
+                self.handle,
+                &unicode_name.0 as *const _ as *mut _,
+                0,
+                REG_DWORD,
+                &mut value.clone() as *const _ as *mut _,
+                std::mem::size_of::<u32>() as _,
+            )
+        } {
+            0 => Ok(()),
+            err => Err(RegValueError::Write(err).into()),
+        }
+    }
+
+    /// Create or update a `NONE` value `name` with `value`
+    pub fn write_qword_value<S: AsRef<str>>(&mut self, name: S, value: u64) -> Result<()> {
+        let unicode_name = UnicodeString::from(name.as_ref());
+        match unsafe {
+            NtSetValueKey(
+                self.handle,
+                &unicode_name.0 as *const _ as *mut _,
+                0,
+                REG_QWORD,
+                &mut value.clone() as *const _ as *mut _,
+                std::mem::size_of::<u64>() as _,
+            )
+        } {
+            0 => Ok(()),
+            err => Err(RegValueError::Write(err).into()),
+        }
+    }
+
+    /// Create or update a `NONE` value `name` with `value`
+    pub fn write_none_value<S: AsRef<str>, V: AsRef<[u8]>>(
+        &mut self,
+        name: S,
+        value: V,
+    ) -> Result<()> {
+        let unicode_name = UnicodeString::from(name.as_ref());
+        match unsafe {
+            NtSetValueKey(
+                self.handle,
+                &unicode_name.0 as *const _ as *mut _,
+                0,
+                REG_NONE,
+                value.as_ref() as *const _ as *mut _,
+                value.as_ref().len() as _,
+            )
+        } {
+            0 => Ok(()),
+            err => Err(RegValueError::Write(err).into()),
+        }
     }
 }
 
