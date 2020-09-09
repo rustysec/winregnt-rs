@@ -48,17 +48,11 @@ impl RegValue {
                     .skip(info.data_offset as usize)
                     .take(info.data_length as usize)
                     .collect::<Vec<u8>>();
-                if info.data_length as usize != tmp_data.len() {
-                    println!(
-                        "data_length: {}, actual: {}",
-                        info.data_length,
-                        tmp_data.len()
-                    );
-                }
                 if info.data_length > 0 && tmp_data.len() >= info.data_length as usize {
                     let wide_data = tmp_data
                         .chunks_exact(2)
                         .map(|chunk| u16::from_ne_bytes([chunk[0], chunk[1]]))
+                        .filter(|c| *c != 0x0000)
                         .collect::<Vec<_>>();
                     widestring::U16String::from_vec(wide_data)
                         .to_ustring()
