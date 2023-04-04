@@ -1,9 +1,8 @@
 use crate::api::RtlInitUnicodeString;
-use std::ffi::OsString;
-use std::mem::zeroed;
-use std::os::windows::ffi::OsStrExt;
+use std::{ffi::OsString, mem::zeroed, os::windows::ffi::OsStrExt};
 use winapi::shared::ntdef::UNICODE_STRING;
 
+#[derive(Clone)]
 pub(crate) struct UnicodeString(pub UNICODE_STRING, Vec<u16>);
 
 impl Default for UnicodeString {

@@ -303,6 +303,7 @@ impl Into<ValueType> for DWORD {
     }
 }
 
+#[allow(missing_docs)]
 #[link(name = "ntdll")]
 extern "system" {
     pub fn RtlInitUnicodeString(dest: *mut UNICODE_STRING, source: *const u16);

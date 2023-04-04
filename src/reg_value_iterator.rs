@@ -1,28 +1,28 @@
 use crate::{api::*, error, Result};
-use std::convert::TryFrom;
-use std::ffi::OsString;
-use std::mem::size_of;
-use std::os::windows::ffi::OsStringExt;
-use winapi::shared::minwindef::ULONG;
-use winapi::shared::ntdef::HANDLE;
+use std::{
+    cell::RefCell, convert::TryFrom, ffi::OsString, mem::size_of, os::windows::ffi::OsStringExt,
+    rc::Rc,
+};
+use winapi::shared::{minwindef::ULONG, ntdef::HANDLE};
 
 /// get an iterator of key values
-pub struct RegValueIterator<'a> {
-    handle: &'a HANDLE,
+pub struct RegValueIterator {
+    handle: Rc<RefCell<HANDLE>>,
     index: ULONG,
 }
 
-impl<'a> RegValueIterator<'a> {
-    pub fn new(handle: &'a HANDLE) -> RegValueIterator<'a> {
+impl RegValueIterator {
+    /// create a new RegValueIterator from a handle
+    pub fn new(handle: Rc<RefCell<HANDLE>>) -> RegValueIterator {
         RegValueIterator { handle, index: 0 }
     }
 }
 
-impl<'a> Iterator for RegValueIterator<'a> {
+impl Iterator for RegValueIterator {
     type Item = RegValueItem;
 
     fn next(&mut self) -> Option<RegValueItem> {
-        match enumerate_value_key(*self.handle, self.index) {
+        match enumerate_value_key(*self.handle.borrow(), self.index) {
             Some(data) => {
                 self.index += 1;
                 RegValueItem::try_from(data).ok()
@@ -61,7 +61,7 @@ impl std::fmt::Display for RegValueItem {
 impl TryFrom<Vec<u8>> for RegValueItem {
     type Error = error::Error;
 
-    fn try_from(data: Vec<u8>) -> std::result::Result<Self, Self::Error> {
+    fn try_from(data: Vec<u8>) -> Result<Self> {
         let start = size_of::<KeyValueFullInformation>();
         if data.len() >= start {
             let value = KeyValueFullInformation::new(&data).map_err(Into::<Self::Error>::into)?;

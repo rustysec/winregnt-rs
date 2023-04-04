@@ -34,12 +34,11 @@ mod reg_key_iterator;
 mod reg_value_iterator;
 mod unicode_string;
 
-pub use crate::api::*;
-pub use crate::error::*;
-use crate::reg_key_iterator::*;
-use crate::reg_value_iterator::*;
-use crate::unicode_string::*;
-use std::{ffi::OsString, mem::zeroed, os::windows::ffi::OsStrExt, ptr::null_mut};
+pub use crate::{api::*, error::*, reg_key_iterator::RegSubkey};
+use crate::{reg_key_iterator::*, reg_value_iterator::*, unicode_string::*};
+use std::{
+    cell::RefCell, ffi::OsString, mem::zeroed, os::windows::ffi::OsStrExt, ptr::null_mut, rc::Rc,
+};
 use winapi::{
     shared::{
         ntdef::{InitializeObjectAttributes, HANDLE, OBJECT_ATTRIBUTES, OBJ_CASE_INSENSITIVE},
@@ -58,17 +57,18 @@ use winapi::{
 pub type Result<T> = std::result::Result<T, error::Error>;
 
 /// Entry point for all registry access
+#[derive(Clone)]
 pub struct RegKey {
-    handle: HANDLE,
+    handle: Rc<RefCell<HANDLE>>,
     name: Vec<u16>,
     u: UnicodeString,
 }
 
 impl Drop for RegKey {
     fn drop(&mut self) {
-        if !self.handle.is_null() {
+        if !self.handle.borrow().is_null() {
             unsafe {
-                NtClose(self.handle);
+                NtClose(*(self.handle.borrow()));
             }
         }
     }
@@ -108,12 +108,12 @@ impl RegKey {
 
     /// get a key value iterator
     pub fn enum_values(&self) -> RegValueIterator {
-        RegValueIterator::new(&self.handle)
+        RegValueIterator::new(self.handle.clone())
     }
 
     /// delete the current key
     pub fn delete(&self) -> Result<()> {
-        match unsafe { api::NtDeleteKey(self.handle) } as i32 {
+        match unsafe { api::NtDeleteKey(*self.handle.borrow()) } as i32 {
             STATUS_ACCESS_DENIED => Err(RegKeyError::DeleteAccessDenied.into()),
             STATUS_INVALID_HANDLE => Err(RegKeyError::DeleteInvalidHandle.into()),
             _ => Ok(()),
@@ -123,8 +123,12 @@ impl RegKey {
     /// delete a value
     pub fn delete_value<S: AsRef<str>>(&self, value_name: S) -> Result<()> {
         let unicode_string = UnicodeString::from(value_name.as_ref());
-        match unsafe { NtDeleteValueKey(self.handle, &unicode_string.0 as *const _ as *mut _) }
-            as i32
+        match unsafe {
+            NtDeleteValueKey(
+                *self.handle.borrow(),
+                &unicode_string.0 as *const _ as *mut _,
+            )
+        } as i32
         {
             STATUS_ACCESS_DENIED => Err(crate::error::RegValueError::AccessDenied.into()),
             STATUS_INSUFFICIENT_RESOURCES => {
@@ -138,7 +142,7 @@ impl RegKey {
 
     fn open_key<S: AsRef<str>>(name: S, permission: u32) -> Result<RegKey> {
         let mut key = RegKey {
-            handle: unsafe { zeroed() },
+            handle: unsafe { Rc::new(RefCell::new(zeroed())) },
             name: {
                 let mut t = OsString::from(name.as_ref())
                     .encode_wide()
@@ -148,6 +152,7 @@ impl RegKey {
             },
             u: Default::default(),
         };
+
         key.u = UnicodeString::from(&key.name);
 
         let mut object_attr: OBJECT_ATTRIBUTES = unsafe { zeroed() };
@@ -161,7 +166,10 @@ impl RegKey {
             );
         }
 
-        match unsafe { NtOpenKey(&mut key.handle, permission, &object_attr) } {
+        match unsafe {
+            let temp = NtOpenKey(&mut *key.handle.borrow_mut(), permission, &object_attr);
+            temp
+        } {
             0 => Ok(key),
             err => Err(Error::KeyError(name.as_ref().to_string(), err)),
         }
@@ -176,7 +184,7 @@ impl RegKey {
         let unicode_name = UnicodeString::from(name.as_ref());
         match unsafe {
             NtSetValueKey(
-                self.handle,
+                *self.handle.borrow(),
                 &unicode_name.0 as *const _ as *mut _,
                 0,
                 REG_BINARY,
@@ -204,7 +212,7 @@ impl RegKey {
 
         match unsafe {
             NtSetValueKey(
-                self.handle,
+                *self.handle.borrow(),
                 &unicode_name.0 as *const _ as *mut _,
                 0,
                 REG_SZ,
@@ -222,7 +230,7 @@ impl RegKey {
         let unicode_name = UnicodeString::from(name.as_ref());
         match unsafe {
             NtSetValueKey(
-                self.handle,
+                *self.handle.borrow(),
                 &unicode_name.0 as *const _ as *mut _,
                 0,
                 REG_DWORD,
@@ -240,7 +248,7 @@ impl RegKey {
         let unicode_name = UnicodeString::from(name.as_ref());
         match unsafe {
             NtSetValueKey(
-                self.handle,
+                *self.handle.borrow(),
                 &unicode_name.0 as *const _ as *mut _,
                 0,
                 REG_QWORD,
@@ -262,7 +270,7 @@ impl RegKey {
         let unicode_name = UnicodeString::from(name.as_ref());
         match unsafe {
             NtSetValueKey(
-                self.handle,
+                *self.handle.borrow(),
                 &unicode_name.0 as *const _ as *mut _,
                 0,
                 REG_NONE,

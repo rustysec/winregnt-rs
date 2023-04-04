@@ -3,35 +3,32 @@ use crate::{
     error::{self, Error},
     RegKey, Result,
 };
-use std::ffi::OsString;
-use std::mem::size_of;
-use std::os::windows::ffi::OsStringExt;
-use winapi::shared::minwindef::ULONG;
-use winapi::shared::ntdef::HANDLE;
+use std::{cell::RefCell, ffi::OsString, mem::size_of, os::windows::ffi::OsStringExt, rc::Rc};
+use winapi::shared::{minwindef::ULONG, ntdef::HANDLE};
 
 /// iterator over registry keys
-pub struct RegKeyIterator<'a> {
-    handle: &'a HANDLE,
+pub struct RegKeyIterator {
+    handle: Rc<RefCell<HANDLE>>,
     index: ULONG,
-    name: &'a [u16],
+    name: Vec<u16>,
 }
 
-impl<'a> RegKeyIterator<'a> {
+impl RegKeyIterator {
     /// get an iterator for a `RegKey`
-    pub fn new(key: &'a RegKey) -> RegKeyIterator<'a> {
+    pub fn new(key: &RegKey) -> RegKeyIterator {
         RegKeyIterator {
-            handle: &key.handle,
+            handle: key.handle.clone(),
             index: 0,
-            name: &key.name,
+            name: key.name.clone(),
         }
     }
 }
 
-impl<'a> Iterator for RegKeyIterator<'a> {
-    type Item = RegSubkey<'a>;
+impl Iterator for RegKeyIterator {
+    type Item = RegSubkey;
 
-    fn next(&mut self) -> Option<RegSubkey<'a>> {
-        match enumerate_key(*self.handle, self.index) {
+    fn next(&mut self) -> Option<RegSubkey> {
+        match enumerate_key(*self.handle.borrow(), self.index) {
             Some(data) => {
                 if data.len() >= size_of::<KeyBasicInformation>() {
                     match KeyBasicInformation::new(&data) {
@@ -61,7 +58,7 @@ impl<'a> Iterator for RegKeyIterator<'a> {
                                     self.index += 1;
                                     Some(RegSubkey {
                                         name: s,
-                                        parent: self.name,
+                                        parent: self.name.clone(),
                                     })
                                 }
                                 Err(_) => None,
@@ -79,14 +76,14 @@ impl<'a> Iterator for RegKeyIterator<'a> {
 }
 
 /// child key
-pub struct RegSubkey<'a> {
+pub struct RegSubkey {
     name: String,
-    parent: &'a [u16],
+    parent: Vec<u16>,
 }
 
-impl<'a> RegSubkey<'a> {
+impl RegSubkey {
     /// returns a `RegKey`
-    pub fn open(&'a self) -> Result<RegKey> {
+    pub fn open(&self) -> Result<RegKey> {
         let parent = {
             let mut p = self.parent.to_vec();
             p.pop();
@@ -102,7 +99,7 @@ impl<'a> RegSubkey<'a> {
     }
 
     /// returns a `RegKey`
-    pub fn open_write(&'a self) -> Result<RegKey> {
+    pub fn open_write(&self) -> Result<RegKey> {
         let parent = {
             let mut p = self.parent.to_vec();
             p.pop();
@@ -118,7 +115,7 @@ impl<'a> RegSubkey<'a> {
     }
 }
 
-impl<'a> ::std::fmt::Display for RegSubkey<'a> {
+impl ::std::fmt::Display for RegSubkey {
     fn fmt(&self, fmt: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
         write!(fmt, "{}", self.name)
     }
