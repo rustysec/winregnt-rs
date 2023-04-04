@@ -113,6 +113,11 @@ impl RegSubkey {
         s.push_str(&self.name);
         RegKey::open_write(s)
     }
+
+    /// returns the name of the subkey
+    pub fn name(&self) -> String {
+        self.name.to_owned()
+    }
 }
 
 impl ::std::fmt::Display for RegSubkey {
