@@ -34,7 +34,7 @@ mod reg_key_iterator;
 mod reg_value_iterator;
 mod unicode_string;
 
-pub use crate::{api::*, error::*, reg_key_iterator::RegSubkey};
+pub use crate::{api::*, error::*, reg_key_iterator::RegSubkey, reg_value_iterator::RegValueItem};
 use crate::{reg_key_iterator::*, reg_value_iterator::*, unicode_string::*};
 use std::{
     cell::RefCell, ffi::OsString, mem::zeroed, os::windows::ffi::OsStrExt, ptr::null_mut, rc::Rc,
