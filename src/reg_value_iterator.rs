@@ -1,19 +1,25 @@
 use crate::{api::*, error, Result};
 use std::{
-    cell::RefCell, convert::TryFrom, ffi::OsString, mem::size_of, os::windows::ffi::OsStringExt,
-    rc::Rc,
+    convert::TryFrom,
+    ffi::OsString,
+    mem::size_of,
+    os::windows::ffi::OsStringExt,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
 };
 use winapi::shared::{minwindef::ULONG, ntdef::HANDLE};
 
 /// get an iterator of key values
 pub struct RegValueIterator {
-    handle: Rc<RefCell<HANDLE>>,
+    handle: Arc<AtomicUsize>,
     index: ULONG,
 }
 
 impl RegValueIterator {
     /// create a new RegValueIterator from a handle
-    pub fn new(handle: Rc<RefCell<HANDLE>>) -> RegValueIterator {
+    pub fn new(handle: Arc<AtomicUsize>) -> RegValueIterator {
         RegValueIterator { handle, index: 0 }
     }
 }
@@ -22,7 +28,7 @@ impl Iterator for RegValueIterator {
     type Item = RegValueItem;
 
     fn next(&mut self) -> Option<RegValueItem> {
-        match enumerate_value_key(*self.handle.borrow(), self.index) {
+        match enumerate_value_key(self.handle.load(Ordering::SeqCst) as HANDLE, self.index) {
             Some(data) => {
                 self.index += 1;
                 RegValueItem::try_from(data).ok()

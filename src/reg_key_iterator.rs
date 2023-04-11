@@ -3,12 +3,20 @@ use crate::{
     error::{self, Error},
     RegKey, Result,
 };
-use std::{cell::RefCell, ffi::OsString, mem::size_of, os::windows::ffi::OsStringExt, rc::Rc};
+use std::{
+    ffi::OsString,
+    mem::size_of,
+    os::windows::ffi::OsStringExt,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+};
 use winapi::shared::{minwindef::ULONG, ntdef::HANDLE};
 
 /// iterator over registry keys
 pub struct RegKeyIterator {
-    handle: Rc<RefCell<HANDLE>>,
+    handle: Arc<AtomicUsize>,
     index: ULONG,
     name: Vec<u16>,
 }
@@ -22,13 +30,17 @@ impl RegKeyIterator {
             name: key.name.clone(),
         }
     }
+
+    fn handle(&self) -> HANDLE {
+        self.handle.load(Ordering::SeqCst) as HANDLE
+    }
 }
 
 impl Iterator for RegKeyIterator {
     type Item = RegSubkey;
 
     fn next(&mut self) -> Option<RegSubkey> {
-        match enumerate_key(*self.handle.borrow(), self.index) {
+        match enumerate_key(self.handle(), self.index) {
             Some(data) => {
                 if data.len() >= size_of::<KeyBasicInformation>() {
                     match KeyBasicInformation::new(&data) {
