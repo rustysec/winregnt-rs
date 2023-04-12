@@ -68,7 +68,6 @@ pub type Result<T> = std::result::Result<T, error::Error>;
 pub struct RegKey {
     handle: Arc<AtomicUsize>,
     name: Vec<u16>,
-    u: UnicodeString,
 }
 
 impl Drop for RegKey {
@@ -145,7 +144,7 @@ impl RegKey {
     }
 
     fn open_key<S: AsRef<str>>(name: S, permission: u32) -> Result<RegKey> {
-        let mut key = RegKey {
+        let key = RegKey {
             handle: Arc::new(Default::default()),
             name: {
                 let mut t = OsString::from(name.as_ref())
@@ -154,16 +153,15 @@ impl RegKey {
                 t.push(0x00);
                 t
             },
-            u: Default::default(),
         };
 
-        key.u = UnicodeString::from(&key.name);
+        let mut unicode = UnicodeString::from(&key.name);
 
         let mut object_attr: OBJECT_ATTRIBUTES = unsafe { zeroed() };
         unsafe {
             InitializeObjectAttributes(
                 &mut object_attr,
-                &mut key.u.0,
+                &mut unicode.0,
                 OBJ_CASE_INSENSITIVE,
                 null_mut(),
                 null_mut(),
