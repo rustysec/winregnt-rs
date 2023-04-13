@@ -67,7 +67,8 @@ pub type Result<T> = std::result::Result<T, error::Error>;
 #[derive(Clone)]
 pub struct RegKey {
     handle: Arc<AtomicUsize>,
-    name: Vec<u16>,
+    wide_name: Vec<u16>,
+    name: String,
 }
 
 impl Drop for RegKey {
@@ -146,16 +147,17 @@ impl RegKey {
     fn open_key<S: AsRef<str>>(name: S, permission: u32) -> Result<RegKey> {
         let key = RegKey {
             handle: Arc::new(Default::default()),
-            name: {
+            wide_name: {
                 let mut t = OsString::from(name.as_ref())
                     .encode_wide()
                     .collect::<Vec<u16>>();
                 t.push(0x00);
                 t
             },
+            name: name.as_ref().to_string(),
         };
 
-        let mut unicode = UnicodeString::from(&key.name);
+        let mut unicode = UnicodeString::from(&key.wide_name);
 
         let mut object_attr: OBJECT_ATTRIBUTES = unsafe { zeroed() };
         unsafe {
@@ -292,6 +294,11 @@ impl RegKey {
 
     fn handle(&self) -> HANDLE {
         self.handle.load(Ordering::SeqCst) as HANDLE
+    }
+
+    /// Return the registry path/name of this key
+    pub fn name(&self) -> String {
+        self.name.to_string()
     }
 }
 

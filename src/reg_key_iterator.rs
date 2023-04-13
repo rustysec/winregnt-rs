@@ -27,7 +27,7 @@ impl RegKeyIterator {
         RegKeyIterator {
             handle: key.handle.clone(),
             index: 0,
-            name: key.name.clone(),
+            name: key.wide_name.clone(),
         }
     }
 
